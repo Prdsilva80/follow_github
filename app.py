@@ -46,10 +46,8 @@ def follow_user(user):
     url = f"https://api.github.com/user/following/{user}"
     response = requests.put(url, headers=HEADERS)
     if response.status_code == 204:
-        print(f"Seguindo {user}")
+        print(f"Agora você está seguindo {user}")
         return True
-    elif response.status_code == 404:
-        print(f"Usuário {user} não encontrado. Código de erro: {response.status_code}")
     else:
         print(f"Falha ao seguir {user}. Código de erro: {response.status_code}")
     return False
@@ -70,29 +68,42 @@ def save_to_json(filename, data):
     with open(filename, 'w') as json_file:
         json.dump(data, json_file, indent=4)
 
-# Função principal para gerenciar seguidores
-def manage_followers():
+# Função principal para gerenciar seguidores e seguidos
+def manage_following():
     current_followers = get_followers()
     following = get_following()
 
-    followed_users = []
     unfollowed_users = []
+    followed_users = []
 
-    # Seguir automaticamente novos seguidores
-    for follower in current_followers:
-        if follower not in following:
-            if follow_user(follower):
-                followed_users.append(follower)
+    # Listas para investigar diferenças
+    not_following_back = [user for user in following if user not in current_followers]
+    not_followed_by_me = [user for user in current_followers if user not in following]
 
-    # Parar de seguir quem deixou de te seguir
-    for user in following:
-        if user not in current_followers:
-            if unfollow_user(user):
-                unfollowed_users.append(user)
+    # Exibe os resultados
+    if not_following_back:
+        print("Usuários que você segue mas não te seguem de volta:", not_following_back)
+    else:
+        print("Todos que você segue também te seguem de volta.")
+
+    if not_followed_by_me:
+        print("Usuários que te seguem mas você não segue de volta:", not_followed_by_me)
+    else:
+        print("Você segue todos os seus seguidores.")
+
+    # Parar de seguir quem não te segue de volta
+    for user in not_following_back:
+        if unfollow_user(user):
+            unfollowed_users.append(user)
+
+    # Seguir automaticamente quem te segue, mas você não segue
+    for user in not_followed_by_me:
+        if follow_user(user):
+            followed_users.append(user)
 
     # Salvar os resultados em arquivos JSON
-    save_to_json("followed_users.json", followed_users)
     save_to_json("unfollowed_users.json", unfollowed_users)
+    save_to_json("followed_users.json", followed_users)
 
 if __name__ == "__main__":
-    manage_followers()
+    manage_following()
