@@ -2,6 +2,10 @@ import requests
 import os
 import json
 from dotenv import load_dotenv
+import logging
+
+# Configurar logging
+logging.basicConfig(level=logging.INFO)
 
 # Carregar token do .env
 load_dotenv()
@@ -13,54 +17,60 @@ HEADERS = {
     "Accept": "application/vnd.github.v3+json"
 }
 
-# Função para obter todos os seguidores com paginação
-def get_followers():
-    followers = []
+# Função genérica para obter dados paginados
+def get_paginated_data(url):
+    data = []
     page = 1
     while True:
-        url = f"https://api.github.com/users/{USERNAME}/followers?page={page}&per_page=100"
-        response = requests.get(url, headers=HEADERS)
-        data = response.json()
-        if len(data) == 0:
+        try:
+            response = requests.get(f"{url}?page={page}&per_page=100", headers=HEADERS)
+            response.raise_for_status()
+            page_data = response.json()
+            if not page_data:
+                break
+            data.extend(page_data)
+            page += 1
+        except requests.exceptions.RequestException as e:
+            logging.error(f"Erro ao obter dados: {e}")
             break
-        followers.extend([follower['login'] for follower in data])
-        page += 1
-    return followers
+    return data
 
-# Função para obter quem você está seguindo com paginação
+# Função para obter todos os seguidores
+def get_followers():
+    url = f"https://api.github.com/users/{USERNAME}/followers"
+    followers = get_paginated_data(url)
+    return [follower['login'] for follower in followers]
+
+# Função para obter quem você está seguindo
 def get_following():
-    following = []
-    page = 1
-    while True:
-        url = f"https://api.github.com/users/{USERNAME}/following?page={page}&per_page=100"
-        response = requests.get(url, headers=HEADERS)
-        data = response.json()
-        if len(data) == 0:
-            break
-        following.extend([following['login'] for following in data])
-        page += 1
-    return following
+    url = f"https://api.github.com/users/{USERNAME}/following"
+    following = get_paginated_data(url)
+    return [user['login'] for user in following]
 
 # Função para seguir usuários
 def follow_user(user):
     url = f"https://api.github.com/user/following/{user}"
-    response = requests.put(url, headers=HEADERS)
-    if response.status_code == 204:
-        print(f"Agora você está seguindo {user}")
-        return True
-    else:
-        print(f"Falha ao seguir {user}. Código de erro: {response.status_code}")
+    try:
+        response = requests.put(url, headers=HEADERS)
+        response.raise_for_status()
+        if response.status_code == 204:
+            logging.info(f"Agora você está seguindo {user}")
+            return True
+    except requests.exceptions.RequestException as e:
+        logging.error(f"Falha ao seguir {user}. Erro: {e}")
     return False
 
 # Função para deixar de seguir usuários
 def unfollow_user(user):
     url = f"https://api.github.com/user/following/{user}"
-    response = requests.delete(url, headers=HEADERS)
-    if response.status_code == 204:
-        print(f"Parou de seguir {user}")
-        return True
-    else:
-        print(f"Falha ao parar de seguir {user}. Código de erro: {response.status_code}")
+    try:
+        response = requests.delete(url, headers=HEADERS)
+        response.raise_for_status()
+        if response.status_code == 204:
+            logging.info(f"Parou de seguir {user}")
+            return True
+    except requests.exceptions.RequestException as e:
+        logging.error(f"Falha ao parar de seguir {user}. Erro: {e}")
     return False
 
 # Função para salvar dados em JSON
@@ -82,14 +92,14 @@ def manage_following():
 
     # Exibe os resultados
     if not_following_back:
-        print("Usuários que você segue mas não te seguem de volta:", not_following_back)
+        logging.info("Usuários que você segue mas não te seguem de volta: %s", not_following_back)
     else:
-        print("Todos que você segue também te seguem de volta.")
+        logging.info("Todos que você segue também te seguem de volta.")
 
     if not_followed_by_me:
-        print("Usuários que te seguem mas você não segue de volta:", not_followed_by_me)
+        logging.info("Usuários que te seguem mas você não segue de volta: %s", not_followed_by_me)
     else:
-        print("Você segue todos os seus seguidores.")
+        logging.info("Você segue todos os seus seguidores.")
 
     # Parar de seguir quem não te segue de volta
     for user in not_following_back:
