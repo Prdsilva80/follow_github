@@ -17,6 +17,9 @@ HEADERS = {
     "Accept": "application/vnd.github.v3+json"
 }
 
+# Lista de usuários bloqueados
+BLOCKED_USERS = os.getenv('BLOCKED_USERS')
+
 # Função genérica para obter dados paginados
 def get_paginated_data(url):
     data = []
@@ -49,6 +52,9 @@ def get_following():
 
 # Função para seguir usuários
 def follow_user(user):
+    if user in BLOCKED_USERS:
+        logging.info(f"Usuário {user} está bloqueado e não será seguido.")
+        return False
     url = f"https://api.github.com/user/following/{user}"
     try:
         response = requests.put(url, headers=HEADERS)
@@ -71,6 +77,19 @@ def unfollow_user(user):
             return True
     except requests.exceptions.RequestException as e:
         logging.error(f"Falha ao parar de seguir {user}. Erro: {e}")
+    return False
+
+# Função para bloquear usuários
+def block_user(user):
+    url = f"https://api.github.com/user/blocks/{user}"
+    try:
+        response = requests.put(url, headers=HEADERS)
+        response.raise_for_status()
+        if response.status_code == 204:
+            logging.info(f"Usuário {user} foi bloqueado")
+            return True
+    except requests.exceptions.RequestException as e:
+        logging.error(f"Falha ao bloquear {user}. Erro: {e}")
     return False
 
 # Função para salvar dados em JSON
@@ -110,6 +129,15 @@ def manage_following():
     for user in not_followed_by_me:
         if follow_user(user):
             followed_users.append(user)
+
+    # Deixar de seguir e bloquear usuários bloqueados
+    for user in BLOCKED_USERS:
+        if user in following:
+            if unfollow_user(user):
+                unfollowed_users.append(user)
+        if user in current_followers:
+            if block_user(user):
+                logging.info(f"Usuário {user} foi removido da lista de seguidores")
 
     # Salvar os resultados em arquivos JSON
     save_to_json("unfollowed_users.json", unfollowed_users)
