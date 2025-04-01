@@ -18,7 +18,8 @@ HEADERS = {
 }
 
 # Lista de usuários bloqueados
-BLOCKED_USERS = os.getenv('BLOCKED_USERS')
+BLOCKED_USERS = os.getenv('BLOCKED_USERS', '')
+BLOCKED_USERS = [user.strip() for user in BLOCKED_USERS.split(',')]
 
 # Função genérica para obter dados paginados
 def get_paginated_data(url):
