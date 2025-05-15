@@ -4,10 +4,17 @@ import json
 from dotenv import load_dotenv
 import logging
 
-# Configurar logging
-logging.basicConfig(level=logging.INFO)
+# Configurar logging para arquivo e console
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(levelname)s - %(message)s",
+    handlers=[
+        logging.FileHandler("github_follow_log.log"),
+        logging.StreamHandler()
+    ]
+)
 
-# Carregar token do .env
+# Carregar variáveis do .env
 load_dotenv()
 TOKEN = os.getenv('GITHUB_TOKEN')
 USERNAME = os.getenv('USER_NAME')
@@ -17,11 +24,9 @@ HEADERS = {
     "Accept": "application/vnd.github.v3+json"
 }
 
-# Lista de usuários bloqueados
-BLOCKED_USERS = os.getenv('BLOCKED_USERS', '')
-BLOCKED_USERS = [user.strip() for user in BLOCKED_USERS.split(',')]
+# Lista de usuários bloqueados (case-insensitive)
+BLOCKED_USERS = [user.strip().lower() for user in os.getenv('BLOCKED_USERS', '').split(',') if user.strip()]
 
-# Função genérica para obter dados paginados
 def get_paginated_data(url):
     data = []
     page = 1
@@ -39,21 +44,16 @@ def get_paginated_data(url):
             break
     return data
 
-# Função para obter todos os seguidores
 def get_followers():
     url = f"https://api.github.com/users/{USERNAME}/followers"
-    followers = get_paginated_data(url)
-    return [follower['login'] for follower in followers]
+    return [follower['login'] for follower in get_paginated_data(url)]
 
-# Função para obter quem você está seguindo
 def get_following():
     url = f"https://api.github.com/users/{USERNAME}/following"
-    following = get_paginated_data(url)
-    return [user['login'] for user in following]
+    return [user['login'] for user in get_paginated_data(url)]
 
-# Função para seguir usuários
 def follow_user(user):
-    if user in BLOCKED_USERS:
+    if user.lower() in BLOCKED_USERS:
         logging.info(f"Usuário {user} está bloqueado e não será seguido.")
         return False
     url = f"https://api.github.com/user/following/{user}"
@@ -67,7 +67,6 @@ def follow_user(user):
         logging.error(f"Falha ao seguir {user}. Erro: {e}")
     return False
 
-# Função para deixar de seguir usuários
 def unfollow_user(user):
     url = f"https://api.github.com/user/following/{user}"
     try:
@@ -80,7 +79,6 @@ def unfollow_user(user):
         logging.error(f"Falha ao parar de seguir {user}. Erro: {e}")
     return False
 
-# Função para bloquear usuários
 def block_user(user):
     url = f"https://api.github.com/user/blocks/{user}"
     try:
@@ -93,12 +91,10 @@ def block_user(user):
         logging.error(f"Falha ao bloquear {user}. Erro: {e}")
     return False
 
-# Função para salvar dados em JSON
 def save_to_json(filename, data):
     with open(filename, 'w') as json_file:
         json.dump(data, json_file, indent=4)
 
-# Função principal para gerenciar seguidores e seguidos
 def manage_following():
     current_followers = get_followers()
     following = get_following()
@@ -106,11 +102,20 @@ def manage_following():
     unfollowed_users = []
     followed_users = []
 
-    # Listas para investigar diferenças
-    not_following_back = [user for user in following if user not in current_followers]
-    not_followed_by_me = [user for user in current_followers if user not in following]
+    # Bloquear e parar de seguir usuários da lista de bloqueados
+    for user in following:
+        if user.lower() in BLOCKED_USERS:
+            if unfollow_user(user):
+                unfollowed_users.append(user)
+    for user in current_followers:
+        if user.lower() in BLOCKED_USERS:
+            if block_user(user):
+                logging.info(f"Usuário {user} foi removido da lista de seguidores")
 
-    # Exibe os resultados
+    # Verificar quem não te segue de volta
+    not_following_back = [user for user in following if user not in current_followers and user.lower() not in BLOCKED_USERS]
+    not_followed_by_me = [user for user in current_followers if user not in following and user.lower() not in BLOCKED_USERS]
+
     if not_following_back:
         logging.info("Usuários que você segue mas não te seguem de volta: %s", not_following_back)
     else:
@@ -131,16 +136,7 @@ def manage_following():
         if follow_user(user):
             followed_users.append(user)
 
-    # Deixar de seguir e bloquear usuários bloqueados
-    for user in BLOCKED_USERS:
-        if user in following:
-            if unfollow_user(user):
-                unfollowed_users.append(user)
-        if user in current_followers:
-            if block_user(user):
-                logging.info(f"Usuário {user} foi removido da lista de seguidores")
-
-    # Salvar os resultados em arquivos JSON
+    # Salvar ações em JSON
     save_to_json("unfollowed_users.json", unfollowed_users)
     save_to_json("followed_users.json", followed_users)
 
